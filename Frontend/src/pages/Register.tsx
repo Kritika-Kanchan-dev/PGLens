@@ -1,3 +1,4 @@
+// src/pages/Register.tsx
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { GraduationCap, Building2 } from "lucide-react";
@@ -15,10 +16,11 @@ const Register = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !password) {
       toast.error("Please fill in all fields");
@@ -28,9 +30,22 @@ const Register = () => {
       toast.error("Passwords do not match");
       return;
     }
-    register(name.trim(), email.trim(), role);
-    toast.success(`Welcome to PGLens, ${name.trim()}!`);
-    navigate(getDashboardPath(role));
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await register(name.trim(), email.trim(), password, role);
+      toast.success(`Welcome to PGLens, ${name.trim()}!`);
+      navigate(getDashboardPath(role));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Registration failed";
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -59,6 +74,7 @@ const Register = () => {
                   key={r.key}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => setRole(r.key)}
+                  type="button"
                   className={`rounded-xl border-2 p-4 text-center transition-all ${
                     role === r.key
                       ? "border-primary bg-primary/5"
@@ -77,29 +93,60 @@ const Register = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-foreground">Full Name</Label>
-                <Input placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} className="border-border rounded-xl" />
+                <Input
+                  placeholder="John Doe"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="border-border rounded-xl"
+                  disabled={isLoading}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-foreground">Email Address</Label>
-                <Input type="email" placeholder="your@email.com" value={email} onChange={(e) => setEmail(e.target.value)} className="border-border rounded-xl" />
+                <Input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="border-border rounded-xl"
+                  disabled={isLoading}
+                />
               </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-foreground">{role === "owner" ? "Business Name" : "Institution / Company"}</Label>
-              <Input placeholder={role === "owner" ? "Your PG Business" : "ABC University"} className="border-border rounded-xl" />
+              <Input
+                placeholder={role === "owner" ? "Your PG Business" : "ABC University"}
+                className="border-border rounded-xl"
+                disabled={isLoading}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-foreground">Password</Label>
-                <Input type="password" placeholder="Create password" value={password} onChange={(e) => setPassword(e.target.value)} className="border-border rounded-xl" />
+                <Input
+                  type="password"
+                  placeholder="Min 6 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="border-border rounded-xl"
+                  disabled={isLoading}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-foreground">Confirm Password</Label>
-                <Input type="password" placeholder="Confirm password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="border-border rounded-xl" />
+                <Input
+                  type="password"
+                  placeholder="Confirm password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  className="border-border rounded-xl"
+                  disabled={isLoading}
+                />
               </div>
             </div>
-            <Button type="submit" className="w-full" size="lg">
-              Create Account
+            <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+              {isLoading ? "Creating Account..." : "Create Account"}
             </Button>
           </form>
 

@@ -1,19 +1,27 @@
-import { createContext, useContext, useState, ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+// src/lib/auth.tsx
+// Replaces fake localStorage auth with real backend API calls
+
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { authAPI } from "./api";
 
 export type UserRole = "student" | "owner" | "admin";
 
 interface User {
+  id: number;
   name: string;
   email: string;
   role: UserRole;
+  avatar?: string;
+  is_verified?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => boolean;
-  register: (name: string, email: string, role: "student" | "owner") => void;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (name: string, email: string, password: string, role: "student" | "owner") => Promise<boolean>;
   logout: () => void;
+  googleLogin: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -24,56 +32,77 @@ export const useAuth = () => {
   return ctx;
 };
 
-const ADMIN_EMAIL = "admin@pglens.com";
-const ADMIN_PASSWORD = "admin123";
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem("pglens_user");
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const login = (email: string, password: string): boolean => {
-    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-      const admin: User = { name: "Admin", email: ADMIN_EMAIL, role: "admin" };
-      setUser(admin);
-      localStorage.setItem("pglens_user", JSON.stringify(admin));
-      return true;
+  // On app load — check if token exists and fetch user
+  useEffect(() => {
+    const token = localStorage.getItem("pglens_token");
+    if (token) {
+      authAPI.getMe()
+        .then((data) => setUser(data.user))
+        .catch(() => {
+          // Token expired or invalid — clear it
+          localStorage.removeItem("pglens_token");
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
     }
-    // For demo: any other email/password logs in as stored role or student
-    const stored = localStorage.getItem(`pglens_account_${email}`);
-    if (stored) {
-      const account = JSON.parse(stored);
-      setUser(account);
-      localStorage.setItem("pglens_user", JSON.stringify(account));
+  }, []);
+
+  // ─── LOGIN ──────────────────────────────────────────────────────────────────
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const data = await authAPI.login(email, password);
+      localStorage.setItem("pglens_token", data.token);
+      setUser(data.user);
       return true;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Login failed";
+      throw new Error(message);
     }
-    // Demo fallback: create student user
-    const u: User = { name: email.split("@")[0], email, role: "student" };
-    setUser(u);
-    localStorage.setItem("pglens_user", JSON.stringify(u));
-    return true;
   };
 
-  const register = (name: string, email: string, role: "student" | "owner") => {
-    const u: User = { name, email, role };
-    setUser(u);
-    localStorage.setItem("pglens_user", JSON.stringify(u));
-    localStorage.setItem(`pglens_account_${email}`, JSON.stringify(u));
+  // ─── REGISTER ───────────────────────────────────────────────────────────────
+  const register = async (
+    name: string,
+    email: string,
+    password: string,
+    role: "student" | "owner"
+  ): Promise<boolean> => {
+    try {
+      const data = await authAPI.register(name, email, password, role);
+      localStorage.setItem("pglens_token", data.token);
+      setUser(data.user);
+      return true;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Registration failed";
+      throw new Error(message);
+    }
   };
 
+  // ─── LOGOUT ─────────────────────────────────────────────────────────────────
   const logout = () => {
+    localStorage.removeItem("pglens_token");
     setUser(null);
-    localStorage.removeItem("pglens_user");
+  };
+
+  // ─── GOOGLE LOGIN ────────────────────────────────────────────────────────────
+  const googleLogin = () => {
+    authAPI.googleLogin();
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout }}>
-      {children}
+    <AuthContext.Provider value={{ user, loading, login, register, logout, googleLogin }}>
+      {/* Show nothing while checking auth status on load */}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };
 
+// ─── Dashboard redirect helper ───────────────────────────────────────────────
 export const getDashboardPath = (role: UserRole) => {
   switch (role) {
     case "admin": return "/admin";
