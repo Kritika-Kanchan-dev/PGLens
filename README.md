@@ -1,5 +1,5 @@
 # 🏠 PGLens  
-### An AI-Powered PG Transparency Platform
+### An AI-Powered PG Transparency Platform.
 
 PGLens is a full-stack web application designed to bring **transparency, trust, and data-driven insights** to the student accommodation ecosystem. The platform helps students and parents make informed decisions while selecting Paying Guest (PG) accommodations by addressing common issues such as misleading claims, poor hygiene, inconsistent pricing, and lack of verified reviews.
 
