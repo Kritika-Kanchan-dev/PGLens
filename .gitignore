@@ -1,0 +1,14 @@
+# Virtual environments
+venv/
+.venv/
+env/
+nlp_service/venv/
+nlp_service/venv/**
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables
+.env
