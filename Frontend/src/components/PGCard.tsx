@@ -1,5 +1,6 @@
+// src/components/PGCard.tsx
 import { Link } from "react-router-dom";
-import { MapPin, Star, CheckCircle } from "lucide-react";
+import { MapPin, Star, CheckCircle, Navigation } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import ScoreBadge from "./ScoreBadge";
@@ -8,9 +9,11 @@ import type { PGListing } from "@/lib/pgData";
 interface PGCardProps {
   pg: PGListing;
   index?: number;
+  distanceKm?: number | null;
+  durationMin?: number | null;
 }
 
-const PGCard = ({ pg, index = 0 }: PGCardProps) => {
+const PGCard = ({ pg, index = 0, distanceKm, durationMin }: PGCardProps) => {
   const priceColor = pg.priceStatus === "Underpriced"
     ? "text-success"
     : pg.priceStatus === "Overpriced"
@@ -39,9 +42,19 @@ const PGCard = ({ pg, index = 0 }: PGCardProps) => {
               </span>
             )}
           </div>
+
           <div className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
             <MapPin className="h-3.5 w-3.5" /> {pg.location} • {pg.distance} km away
           </div>
+
+          {/* ── Road distance from college/workplace ── */}
+          {distanceKm !== undefined && distanceKm !== null && (
+            <div className="mt-1 flex items-center gap-1 text-xs font-medium text-primary">
+              <Navigation className="h-3 w-3" />
+              {distanceKm} km by road · ~{durationMin} min
+            </div>
+          )}
+
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <span className="flex items-center gap-1 text-sm text-muted-foreground">
               <Star className="h-3.5 w-3.5 text-primary" /> Hygiene: {pg.hygiene}/100

@@ -217,3 +217,49 @@ export const reviewAPI = {
     return handleResponse(res);
   },
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IMAGE APIs
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const imageAPI = {
+  // POST /api/images/upload/:pg_id/:category
+  uploadCategory: async (pg_id: number, category: string, files: File[]) => {
+    const formData = new FormData();
+    files.forEach(f => formData.append('images', f));
+
+    const res = await fetch(`${BASE_URL}/images/upload/${pg_id}/${category}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        // NOTE: do NOT set Content-Type here — browser sets it automatically with boundary for multipart
+      },
+      body: formData,
+    });
+    return handleResponse(res);
+  },
+
+  // GET /api/images/pg/:pg_id
+  getByPG: async (pg_id: number) => {
+    const res = await fetch(`${BASE_URL}/images/pg/${pg_id}`);
+    return handleResponse(res);
+  },
+
+  // PATCH /api/images/:image_id/primary
+  setPrimary: async (image_id: number) => {
+    const res = await fetch(`${BASE_URL}/images/${image_id}/primary`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  // DELETE /api/images/:image_id
+  delete: async (image_id: number) => {
+    const res = await fetch(`${BASE_URL}/images/${image_id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    return handleResponse(res);
+  },
+};

@@ -1,16 +1,17 @@
 // src/pages/OwnerDashboard.tsx
 import { useState, useEffect } from "react";
-import { Home, Building, BarChart3, MessageSquare, Plus, User, Star, Edit, Trash2, Eye } from "lucide-react";
+import { Home, Building, BarChart3, MessageSquare, Plus, User, Star, Edit, Trash2, Eye, MapPin, Loader2, Navigation, HelpCircle, ChevronDown } from "lucide-react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import StatCard from "@/components/StatCard";
-import ImageUploader from "@/components/ImageUploader";
+import ImageUploadStep from "@/components/ImageUploader";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { pgAPI, reviewAPI } from "@/lib/api";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { geocodeAddress } from "@/lib/useDistance";
 
 const sidebarItems = [
   { label: "Dashboard", icon: Home, path: "/owner" },
@@ -32,7 +33,6 @@ const OwnerHome = () => {
       .then((data) => {
         const pgs = data.pgs || [];
         setListings(pgs);
-        // Fetch reviews for first PG
         if (pgs.length > 0) {
           return reviewAPI.getByPG(pgs[0].id);
         }
@@ -177,7 +177,14 @@ const MyListings = () => {
                       ) : (
                         <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-xs text-primary font-bold">PG</div>
                       )}
-                      <span className="font-medium text-foreground">{pg.name}</span>
+                      <div>
+                        <span className="font-medium text-foreground">{pg.name}</span>
+                        {pg.latitude && pg.longitude && (
+                          <p className="flex items-center gap-1 text-xs text-success mt-0.5">
+                            <Navigation className="h-3 w-3" /> Location mapped
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -213,28 +220,62 @@ const MyListings = () => {
 const AddPG = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [showCoordHelp, setShowCoordHelp] = useState(false);
   const [step, setStep] = useState<"details" | "images">("details");
   const [createdPgId, setCreatedPgId] = useState<number | null>(null);
-  const [uploadedImages, setUploadedImages] = useState<any[]>([]);
   const [form, setForm] = useState({
     name: "", location: "", city: "", monthly_rent: "",
     room_type: "single", total_rooms: "1",
+    latitude: "", longitude: "",
     has_wifi: false, has_ac: false, has_meals: false,
     has_laundry: false, has_parking: false, has_security: false,
     has_gym: false, has_hot_water: false, has_tv: false,
   });
 
+  // Auto-detect coordinates from location + city
+  const handleAutoDetect = async () => {
+    const address = [form.location, form.city].filter(Boolean).join(", ");
+    if (!address.trim()) {
+      toast.error("Please enter a location and city first");
+      return;
+    }
+    setGeoLoading(true);
+    try {
+      const coords = await geocodeAddress(`${address} India`);
+      if (!coords) {
+        toast.error("Could not detect location. Try entering a more specific address.");
+        return;
+      }
+      setForm((prev) => ({
+        ...prev,
+        latitude: coords[0].toFixed(6),
+        longitude: coords[1].toFixed(6),
+      }));
+      toast.success("Location detected successfully!");
+    } catch {
+      toast.error("Failed to detect location");
+    } finally {
+      setGeoLoading(false);
+    }
+  };
+
   const handleSubmitDetails = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.location || !form.city || !form.monthly_rent) {
+    if (!form.name || !form.location || !form.city || !form.monthly_rent || !form.latitude || !form.longitude || !form.room_type) {
       toast.error("Please fill in all required fields");
       return;
     }
     setLoading(true);
     try {
-      const data = await pgAPI.create({ ...form, monthly_rent: parseInt(form.monthly_rent) });
+      const data = await pgAPI.create({
+        ...form,
+        monthly_rent: parseInt(form.monthly_rent),
+        latitude: form.latitude ? parseFloat(form.latitude) : null,
+        longitude: form.longitude ? parseFloat(form.longitude) : null,
+      });
       setCreatedPgId(data.pg.id);
-      toast.success("PG details saved! Now upload at least 4 images.");
+      toast.success("PG details saved! Upload photos by category. Bedroom & Washroom are required.");
       setStep("images");
     } catch (err: any) {
       toast.error(err.message || "Failed to create PG");
@@ -288,11 +329,12 @@ const AddPG = () => {
                     className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Area, City" />
                 </div>
               </div>
+
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">City *</label>
                   <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}
-                    className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Bangalore" />
+                    className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Lucknow" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Monthly Rent (Rs) *</label>
@@ -300,7 +342,7 @@ const AddPG = () => {
                     className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="8000" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Room Type</label>
+                  <label className="text-sm font-medium text-foreground">Room Type *</label>
                   <select value={form.room_type} onChange={(e) => setForm({ ...form, room_type: e.target.value })}
                     className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none">
                     <option value="single">Single</option>
@@ -309,6 +351,134 @@ const AddPG = () => {
                   </select>
                 </div>
               </div>
+
+              {/* ── Location / Coordinates ── */}
+              <div className="rounded-xl border border-border bg-secondary/20 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <Navigation className="h-4 w-4 text-primary" />
+                      PG Coordinates *
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Required for distance calculation on Explore page
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAutoDetect}
+                    disabled={geoLoading}
+                    className="gap-1.5 shrink-0"
+                  >
+                    {geoLoading
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Detecting...</>
+                      : <><MapPin className="h-3.5 w-3.5" /> Auto-detect</>
+                    }
+                  </Button>
+                </div>
+
+                {form.latitude && form.longitude ? (
+                  <div className="flex items-center gap-2 rounded-lg bg-success/10 border border-success/20 px-3 py-2">
+                    <Navigation className="h-4 w-4 text-success shrink-0" />
+                    <span className="text-xs text-success font-medium">
+                      Location detected: {form.latitude}, {form.longitude}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, latitude: "", longitude: "" })}
+                      className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Latitude (optional)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={form.latitude}
+                        onChange={(e) => setForm({ ...form, latitude: e.target.value })}
+                        placeholder="e.g. 27.6058"
+                        className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Longitude (optional)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={form.longitude}
+                        onChange={(e) => setForm({ ...form, longitude: e.target.value })}
+                        placeholder="e.g. 77.5945"
+                        className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Help finding coordinates ── */}
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowCoordHelp((v) => !v)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <HelpCircle className="h-3.5 w-3.5" />
+                      Need help finding latitude &amp; longitude?
+                    </span>
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showCoordHelp ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {showCoordHelp && (
+                    <div className="px-4 pb-4 pt-1 space-y-3 border-t border-border bg-secondary/10">
+                      <p className="text-xs font-medium text-foreground mt-2">3 easy ways to find coordinates:</p>
+
+                      {/* Method 1 */}
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-primary">Method 1 — Auto-detect (Recommended)</p>
+                        <ol className="text-xs text-muted-foreground space-y-1 list-none">
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary font-bold text-[10px]">1</span>Fill in Location and City fields above</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary font-bold text-[10px]">2</span>Click the "Auto-detect" button</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary font-bold text-[10px]">3</span>Coordinates are filled automatically!</li>
+                        </ol>
+                      </div>
+
+                      <div className="h-px bg-border" />
+
+                      {/* Method 2 */}
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-foreground">Method 2 — Google Maps (Desktop)</p>
+                        <ol className="text-xs text-muted-foreground space-y-1 list-none">
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">1</span>Open <a href="https://maps.google.com" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">maps.google.com</a></li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">2</span>Search your PG's address</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">3</span>Right-click on the exact location on the map</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">4</span>Click the coordinates shown at the top (e.g. 27.6058, 77.5945)</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">5</span>First number = Latitude · Second number = Longitude</li>
+                        </ol>
+                      </div>
+
+                      <div className="h-px bg-border" />
+
+                      {/* Method 3 */}
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-foreground">Method 3 — Google Maps App (Mobile)</p>
+                        <ol className="text-xs text-muted-foreground space-y-1 list-none">
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">1</span>Open Google Maps on your phone</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">2</span>Long press on your PG's location on the map</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">3</span>Coordinates appear at the top of the screen</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">4</span>Tap them to copy, then paste here</li>
+                        </ol>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Amenities</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -322,38 +492,20 @@ const AddPG = () => {
                   ))}
                 </div>
               </div>
+
               <Button type="submit" size="lg" className="w-full" disabled={loading}>
                 {loading ? "Saving..." : "Save Details & Continue"}
               </Button>
             </form>
           )}
           {step === "images" && createdPgId && (
-            <div className="space-y-5">
-              <ImageUploader
-                pgId={createdPgId}
-                onUploadComplete={(imgs) => setUploadedImages(imgs)}
-              />
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => navigate("/owner/listings")}>
-                  Skip for now
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={() => {
-                    if (uploadedImages.length < 4) {
-                      toast.error("Please upload at least 4 images");
-                      return;
-                    }
-                    toast.success("PG submitted for approval!");
-                    navigate("/owner/listings");
-                  }}
-                >
-                  {uploadedImages.length < 4
-                    ? `Need ${4 - uploadedImages.length} more image(s)`
-                    : "Submit for Approval"}
-                </Button>
-              </div>
-            </div>
+            <ImageUploadStep
+              pgId={createdPgId}
+              onComplete={() => {
+                toast.success("PG submitted for approval!");
+                navigate("/owner/listings");
+              }}
+            />
           )}
         </div>
       </div>

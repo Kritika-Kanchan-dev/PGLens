@@ -16,7 +16,7 @@ By leveraging Artificial Intelligence and Machine Learning, PGLens converts unst
 - 🔍 **Claim vs Reality Comparison** between owner claims and user experiences  
 - 🗺️ **Distance Calculation** from colleges using map-based analysis  
 - ⭐ **PG Ranking & Recommendation System**  
-- 🧑‍🎓 **Student-Driven Verified Reviews**  
+- 🧑‍🎓 **Student-Driven Verified Reviews**  .
 
 ---
 
@@ -27,7 +27,7 @@ By leveraging Artificial Intelligence and Machine Learning, PGLens converts unst
 - **AI/ML:** NLP & Computer Vision models  
 - **Database:** PostgreSQL  
 - **Maps:** OpenStreetMap with Leaflet  
-- **Deployment:** Docker-based deployment  
+- **Deployment:** Docker-based deployment  .
 
 ---
 
@@ -73,7 +73,7 @@ By leveraging Artificial Intelligence and Machine Learning, PGLens converts unst
 ## 👩‍💻👨‍💻 Contributors
 
 - Project developed as a **Semester Full-Stack + AIML Project**
-- Open for collaboration and improvements
+- Open for collaboration and improvements.
 
 ---
 

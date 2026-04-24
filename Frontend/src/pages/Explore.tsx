@@ -1,16 +1,28 @@
 // src/pages/Explore.tsx
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Filter, X, SlidersHorizontal, MapPin, Star } from "lucide-react";
+import { Filter, X, SlidersHorizontal, MapPin, Navigation, Loader2 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ScoreBadge from "@/components/ScoreBadge";
 import { pgAPI } from "@/lib/api";
+import { useDistance } from "@/lib/useDistance";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const PRESET_COLLEGES = [
+  "BBAU Lucknow",
+  "Lucknow University",
+  "IIM Lucknow",
+  "GLA University Chaumuhan Mathura",
+  "Shivaji University Kolhapur",
+  "Pune University",
+  "Symbiosis Pune",
+  "Fergusson College Pune",
+];
 
 const Explore = () => {
   const [searchParams] = useSearchParams();
@@ -27,6 +39,11 @@ const Explore = () => {
   const [acRequired, setAcRequired] = useState(false);
   const [foodIncluded, setFoodIncluded] = useState(false);
   const [search, setSearch] = useState(searchParams.get("search") || "");
+
+  // Distance
+  const { distances, loading: distLoading, error: distError, calculateDistances, clearDistances } = useDistance();
+  const [collegeInput, setCollegeInput] = useState("");
+  const [collegeQuery, setCollegeQuery] = useState("");
 
   const fetchPGs = useCallback(async () => {
     setLoading(true);
@@ -56,6 +73,13 @@ const Explore = () => {
     fetchPGs();
   }, [fetchPGs]);
 
+  // Re-calculate distances whenever PGs list changes and a college is already set
+  useEffect(() => {
+    if (collegeQuery && pgs.length > 0) {
+      calculateDistances(collegeQuery, pgs);
+    }
+  }, [pgs]);
+
   const resetFilters = useCallback(() => {
     setBudget([3000, 20000]);
     setRoomType("all");
@@ -69,6 +93,24 @@ const Explore = () => {
     if (pg.price_label === "underpriced") return { text: "Underpriced", cls: "bg-success text-white" };
     if (pg.price_label === "overpriced") return { text: "Overpriced", cls: "bg-warning text-white" };
     return { text: "Fair Price", cls: "bg-primary text-white" };
+  };
+
+  const handleDistanceSearch = async () => {
+    if (!collegeInput.trim()) return;
+    setCollegeQuery(collegeInput.trim());
+    await calculateDistances(collegeInput.trim(), pgs);
+  };
+
+  const handlePreset = async (college: string) => {
+    setCollegeInput(college);
+    setCollegeQuery(college);
+    await calculateDistances(college, pgs);
+  };
+
+  const handleClearDistance = () => {
+    clearDistances();
+    setCollegeInput("");
+    setCollegeQuery("");
   };
 
   const filterContent = (
@@ -149,6 +191,72 @@ const Explore = () => {
           />
         </div>
 
+        {/* ── Distance from college ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mt-4 rounded-2xl border border-border bg-card p-4"
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Navigation className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium text-foreground">Distance from college / workplace</span>
+            {collegeQuery && (
+              <button
+                onClick={handleClearDistance}
+                className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-3 w-3" /> Clear
+              </button>
+            )}
+          </div>
+
+          {/* Preset quick-select buttons */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {PRESET_COLLEGES.map((c) => (
+              <button
+                key={c}
+                onClick={() => handlePreset(c)}
+                className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                  collegeQuery === c
+                    ? "border-primary bg-primary/10 text-primary font-medium"
+                    : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom address input */}
+          <div className="flex gap-2">
+            <input
+              placeholder="Enter your college or workplace address..."
+              value={collegeInput}
+              onChange={(e) => setCollegeInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleDistanceSearch()}
+              className="flex-1 rounded-xl border border-border bg-secondary/50 py-2 px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <Button
+              onClick={handleDistanceSearch}
+              disabled={distLoading || !collegeInput.trim()}
+              size="sm"
+            >
+              {distLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
+            </Button>
+          </div>
+
+          {distError && (
+            <p className="mt-2 text-xs text-destructive">{distError}</p>
+          )}
+          {collegeQuery && !distLoading && !distError && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Showing road distances from{" "}
+              <span className="font-medium text-foreground">{collegeQuery}</span>
+            </p>
+          )}
+        </motion.div>
+
         <div className="mt-6 flex gap-8">
           {/* Desktop filters */}
           <aside className="hidden lg:block w-72 shrink-0">
@@ -222,6 +330,7 @@ const Explore = () => {
               <div className="space-y-4">
                 {pgs.map((pg, i) => {
                   const priceLabel = getPriceLabel(pg);
+                  const distInfo = distances[pg.id];
                   return (
                     <motion.div key={pg.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.05 }}
@@ -252,6 +361,19 @@ const Explore = () => {
                           <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
                             <MapPin className="h-3.5 w-3.5" /> {pg.location}
                           </p>
+
+                          {/* ── Distance badge ── */}
+                          {distInfo && distInfo.distance_km !== null ? (
+                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-primary">
+                              <Navigation className="h-3 w-3" />
+                              {distInfo.distance_km} km by road · ~{distInfo.duration_min} min
+                            </p>
+                          ) : distLoading && collegeQuery && !distInfo ? (
+                            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                              <Loader2 className="h-3 w-3 animate-spin" /> Calculating distance...
+                            </p>
+                          ) : null}
+
                           <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                             {pg.hygiene_score > 0 && <span>Hygiene: {pg.hygiene_score}/100</span>}
                             <span className="capitalize">{pg.room_type}</span>
