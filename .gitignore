@@ -1,14 +1,27 @@
-# Virtual environments
-venv/
-.venv/
-env/
-nlp_service/venv/
-nlp_service/venv/**
+# ── Environment files (NEVER push these) ──
+.env
+.env.local
+.env.production
 
-# Python cache
+# ── Node / Backend ──
+node_modules/
+npm-debug.log*
+
+# ── Python / NLP service ──
+venv/
 __pycache__/
 *.pyc
 *.pyo
+.Python
 
-# Environment variables
-.env
+# ── Frontend build output ──
+dist/
+build/
+
+# ── OS junk ──
+.DS_Store
+Thumbs.db
+
+# ── IDE files ──
+.vscode/
+.idea/

@@ -5,5 +5,5 @@ nltk==3.8.1
 scikit-learn==1.3.2
 
 # LATER INSTALLED FOR BACKFILL.PY
-psycopg2-binary
-requests psycopg2-binary
+# psycopg2-binary
+# requests psycopg2-binary
