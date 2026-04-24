@@ -97,6 +97,19 @@ const PGDetail = () => {
     pg.has_hot_water && "Hot Water", pg.has_tv && "TV",
   ].filter(Boolean);
 
+  // ── Helper: sentiment colour classes ─────────────────────────────────────
+  const sentimentStyle = (sentiment: string) => {
+    if (sentiment === "positive") return "bg-green-100 text-green-800 border border-green-200";
+    if (sentiment === "negative") return "bg-red-100 text-red-800 border border-red-200";
+    return "bg-gray-100 text-gray-600 border border-gray-200";
+  };
+
+  const sentimentEmoji = (sentiment: string) => {
+    if (sentiment === "positive") return "😊";
+    if (sentiment === "negative") return "😞";
+    return "😐";
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -232,6 +245,7 @@ const PGDetail = () => {
                 <div className="mt-4 divide-y divide-border">
                   {reviews.map((r) => (
                     <div key={r.id} className="py-4 first:pt-0 last:pb-0">
+                      {/* Reviewer name + date */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-foreground">{r.reviewer_name}</span>
@@ -239,18 +253,60 @@ const PGDetail = () => {
                         </div>
                         <span className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</span>
                       </div>
+
+                      {/* Star rating */}
                       <div className="mt-1 flex gap-0.5">
                         {Array.from({ length: 5 }).map((_, j) => (
                           <Star key={j} className={`h-4 w-4 ${j < (r.overall_rating || 0) ? "fill-primary text-primary" : "text-border"}`} />
                         ))}
                       </div>
-                      <p className="mt-2 text-sm text-muted-foreground">{r.review_text}</p>
+
+                      {/* Review text */}
+                      {r.review_text && (
+                        <p className="mt-2 text-sm text-muted-foreground">{r.review_text}</p>
+                      )}
+
+                      {/* ── NLP: Sentiment badge + topic pills ── */}
+                      {r.nlp_analysed && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {/* Sentiment pill */}
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${sentimentStyle(r.sentiment)}`}>
+                            <span>{sentimentEmoji(r.sentiment)}</span>
+                            <span>{r.sentiment ? r.sentiment.charAt(0).toUpperCase() + r.sentiment.slice(1) : "Neutral"}</span>
+                            <span className="opacity-60">· {r.sentiment_score}/100</span>
+                          </span>
+
+                          {/* Topic pills */}
+                          {r.nlp_topics?.slice(0, 3).map((topic: string) => (
+                            <span key={topic}
+                              className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 border border-blue-200">
+                              {topic.charAt(0).toUpperCase() + topic.slice(1)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* ── NLP: Keywords ── */}
+                      {r.nlp_analysed && r.nlp_keywords?.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {r.nlp_keywords.slice(0, 6).map((kw: string) => (
+                            <span key={kw}
+                              className="rounded-md bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
+                              #{kw}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Rating breakdown */}
                       <div className="mt-2 flex gap-3 text-xs text-muted-foreground">
                         <span>Hygiene: {r.hygiene_rating}/5</span>
                         <span>Food: {r.food_rating}/5</span>
                         <span>Safety: {r.safety_rating}/5</span>
                         <span>Amenities: {r.amenities_rating}/5</span>
                       </div>
+
+                      {/* Owner reply */}
                       {r.owner_reply && (
                         <div className="mt-3 ml-4 rounded-md border-l-2 border-primary pl-4">
                           <span className="text-xs font-medium text-primary">Owner Reply</span>
