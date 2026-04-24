@@ -200,11 +200,13 @@ const getPGById = async (req, res) => {
     );
 
     // Get reviews (anonymous)
+    // Get reviews (anonymous)
     const reviewsResult = await pool.query(`
       SELECT
         r.id, r.hygiene_rating, r.food_rating, r.safety_rating,
         r.amenities_rating, r.overall_rating, r.review_text,
         r.is_anonymous, r.owner_reply, r.replied_at, r.created_at,
+        r.sentiment, r.sentiment_score, r.nlp_keywords, r.nlp_topics, r.nlp_analysed,
         CASE WHEN r.is_anonymous = true THEN 'Anonymous' ELSE u.name END as reviewer_name,
         CASE WHEN r.is_anonymous = false THEN 'Verified Resident' ELSE 'Verified Resident' END as reviewer_label
       FROM reviews r

@@ -36,14 +36,14 @@ const createTables = async () => {
         -- Basic Info
         name              VARCHAR(150) NOT NULL,
         description       TEXT,
-        location          VARCHAR(255) NOT NULL,       -- "Whitefield, Bangalore"
+        location          VARCHAR(255) NOT NULL,
         city              VARCHAR(100) NOT NULL,
-        latitude          DECIMAL(9,6),               -- for map
+        latitude          DECIMAL(9,6),
         longitude         DECIMAL(9,6),
 
         -- Pricing
-        monthly_rent      INTEGER NOT NULL,            -- in INR
-        fair_price_estimate INTEGER,                   -- AI calculated fair price
+        monthly_rent      INTEGER NOT NULL,
+        fair_price_estimate INTEGER,
 
         -- Room Details
         room_type         VARCHAR(20) DEFAULT 'single'
@@ -67,7 +67,7 @@ const createTables = async () => {
         is_active         BOOLEAN DEFAULT TRUE,
 
         -- AI Scores (updated when reviews come in)
-        overall_score     INTEGER DEFAULT 0,          -- 0-100
+        overall_score     INTEGER DEFAULT 0,
         hygiene_score     INTEGER DEFAULT 0,
         food_score        INTEGER DEFAULT 0,
         safety_score      INTEGER DEFAULT 0,
@@ -86,14 +86,13 @@ const createTables = async () => {
 
     // ─────────────────────────────────────────────────────────────────────────
     // 3. PG_IMAGES — photos uploaded by owner for each PG
-    //    One PG can have multiple images
     // ─────────────────────────────────────────────────────────────────────────
     await pool.query(`
       CREATE TABLE IF NOT EXISTS pg_images (
         id            SERIAL PRIMARY KEY,
         pg_id         INTEGER NOT NULL REFERENCES pgs(id) ON DELETE CASCADE,
-        image_url     VARCHAR(500) NOT NULL,           -- Cloudinary URL
-        is_primary    BOOLEAN DEFAULT FALSE,           -- main cover image
+        image_url     VARCHAR(500) NOT NULL,
+        is_primary    BOOLEAN DEFAULT FALSE,
         uploaded_at   TIMESTAMP DEFAULT NOW()
       );
     `);
@@ -101,15 +100,13 @@ const createTables = async () => {
 
     // ─────────────────────────────────────────────────────────────────────────
     // 4. PG_CLAIMS — owner's claims about their PG
-    //    e.g. "24/7 Hot Water", "Daily Cleaning", "3 Meals/Day"
-    //    Later compared against actual reviews (Claim vs Reality feature)
     // ─────────────────────────────────────────────────────────────────────────
     await pool.query(`
       CREATE TABLE IF NOT EXISTS pg_claims (
         id            SERIAL PRIMARY KEY,
         pg_id         INTEGER NOT NULL REFERENCES pgs(id) ON DELETE CASCADE,
-        claim_text    VARCHAR(255) NOT NULL,           -- "24/7 Hot Water"
-        avg_rating    DECIMAL(3,1) DEFAULT 0,          -- avg from reviews (0-5)
+        claim_text    VARCHAR(255) NOT NULL,
+        avg_rating    DECIMAL(3,1) DEFAULT 0,
         match_status  VARCHAR(20) DEFAULT 'unverified'
                         CHECK (match_status IN ('match', 'mismatch', 'unverified')),
         created_at    TIMESTAMP DEFAULT NOW()
@@ -118,23 +115,20 @@ const createTables = async () => {
     console.log('✅ pg_claims table ready');
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 5. RESIDENCY_VERIFICATIONS — student submits proof they live in a PG
-    //    Admin approves → student becomes "verified resident"
-    //    Only verified residents can write reviews
+    // 5. RESIDENCY_VERIFICATIONS
     // ─────────────────────────────────────────────────────────────────────────
     await pool.query(`
       CREATE TABLE IF NOT EXISTS residency_verifications (
         id              SERIAL PRIMARY KEY,
         student_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         pg_id           INTEGER NOT NULL REFERENCES pgs(id) ON DELETE CASCADE,
-        proof_url       VARCHAR(500) NOT NULL,         -- uploaded document URL
+        proof_url       VARCHAR(500) NOT NULL,
         status          VARCHAR(20) DEFAULT 'pending'
                           CHECK (status IN ('pending', 'approved', 'rejected')),
-        reviewed_by     INTEGER REFERENCES users(id),  -- admin who approved/rejected
+        reviewed_by     INTEGER REFERENCES users(id),
         reviewed_at     TIMESTAMP,
         submitted_at    TIMESTAMP DEFAULT NOW(),
 
-        -- A student can only have one active verification per PG
         UNIQUE(student_id, pg_id)
       );
     `);
@@ -142,7 +136,6 @@ const createTables = async () => {
 
     // ─────────────────────────────────────────────────────────────────────────
     // 6. REVIEWS — anonymous reviews by verified residents
-    //    Ratings for hygiene, food, safety, amenities (each 1-5)
     // ─────────────────────────────────────────────────────────────────────────
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reviews (
@@ -171,6 +164,13 @@ const createTables = async () => {
         owner_reply       TEXT,
         replied_at        TIMESTAMP,
 
+        -- NLP Analysis Results
+        sentiment         VARCHAR(20) DEFAULT 'neutral',
+        sentiment_score   INTEGER DEFAULT 50,
+        nlp_keywords      TEXT[],
+        nlp_topics        TEXT[],
+        nlp_analysed      BOOLEAN DEFAULT FALSE,
+
         created_at        TIMESTAMP DEFAULT NOW(),
         updated_at        TIMESTAMP DEFAULT NOW(),
 
@@ -182,7 +182,6 @@ const createTables = async () => {
 
     // ─────────────────────────────────────────────────────────────────────────
     // 7. TRANSPARENCY_SCORES — AI calculated scorecard per PG
-    //    Updated every time a new review is added
     // ─────────────────────────────────────────────────────────────────────────
     await pool.query(`
       CREATE TABLE IF NOT EXISTS transparency_scores (
@@ -198,8 +197,8 @@ const createTables = async () => {
         pricing_score       INTEGER DEFAULT 0,
 
         -- Price analysis
-        fair_price_estimate INTEGER,                   -- AI estimated fair price
-        price_difference    INTEGER,                   -- actual - fair (+ means overpriced)
+        fair_price_estimate INTEGER,
+        price_difference    INTEGER,
         price_label         VARCHAR(20) DEFAULT 'fair'
                               CHECK (price_label IN ('fair', 'underpriced', 'overpriced')),
 
@@ -211,7 +210,7 @@ const createTables = async () => {
     console.log('✅ transparency_scores table ready');
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 8. SAVED_PGS — student's saved/liked PGs (the ❤️ feature)
+    // 8. SAVED_PGS — student's saved/liked PGs
     // ─────────────────────────────────────────────────────────────────────────
     await pool.query(`
       CREATE TABLE IF NOT EXISTS saved_pgs (
@@ -220,7 +219,6 @@ const createTables = async () => {
         pg_id       INTEGER NOT NULL REFERENCES pgs(id) ON DELETE CASCADE,
         saved_at    TIMESTAMP DEFAULT NOW(),
 
-        -- Can't save same PG twice
         UNIQUE(student_id, pg_id)
       );
     `);
@@ -245,6 +243,20 @@ const createTables = async () => {
       `);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // 9. ADD NLP COLUMNS TO EXISTING reviews TABLE
+    //    (safe to run multiple times — IF NOT EXISTS prevents errors)
+    // ─────────────────────────────────────────────────────────────────────────
+    await pool.query(`
+      ALTER TABLE reviews
+        ADD COLUMN IF NOT EXISTS sentiment VARCHAR(20) DEFAULT 'neutral',
+        ADD COLUMN IF NOT EXISTS sentiment_score INTEGER DEFAULT 50,
+        ADD COLUMN IF NOT EXISTS nlp_keywords TEXT[],
+        ADD COLUMN IF NOT EXISTS nlp_topics TEXT[],
+        ADD COLUMN IF NOT EXISTS nlp_analysed BOOLEAN DEFAULT FALSE;
+    `);
+    console.log('✅ NLP columns added to reviews table');
+
     console.log('\n🎉 All tables created successfully!');
     console.log('─────────────────────────────────────');
     console.log('Tables ready: users, pgs, pg_images, pg_claims,');
@@ -254,6 +266,7 @@ const createTables = async () => {
     console.error('❌ Schema error:', err.message);
     throw err;
   }
+
 };
 
 module.exports = { createTables };

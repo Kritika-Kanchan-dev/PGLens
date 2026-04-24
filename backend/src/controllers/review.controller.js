@@ -1,4 +1,5 @@
 const { pool } = require('../config/db');
+const { analyseReviewText } = require('../config/nlp');
 
 // ─── HELPER: Recalculate Transparency Score for a PG ─────────────────────────
 // Called every time a new review is added or updated
@@ -115,11 +116,9 @@ const updateClaimsStatus = async (pg_id, reviews) => {
     );
 
     for (const claim of claims.rows) {
-      // Average amenities rating as proxy for claim verification
       const avgAmenities = reviews.reduce((acc, r) => acc + (r.amenities_rating || 0), 0) / reviews.length;
       const avg_rating = Math.round(avgAmenities * 10) / 10;
 
-      // Match if avg rating >= 3.5, mismatch if < 2.5
       let match_status = 'unverified';
       if (reviews.length >= 2) {
         match_status = avgAmenities >= 3.5 ? 'match' : 'mismatch';
@@ -190,16 +189,54 @@ const submitReview = async (req, res) => {
     `, [
       pg_id, student_id, hygiene_rating, food_rating, safety_rating,
       amenities_rating, overall_rating, review_text || null,
-      is_anonymous !== false // default to anonymous
+      is_anonymous !== false
     ]);
+
+    const review = result.rows[0];
+
+    // ── NLP Analysis (runs after insert so review is saved even if NLP fails) ──
+    if (review_text && review_text.trim().length > 5) {
+      try {
+        const nlp = await analyseReviewText(review_text);
+
+        await pool.query(`
+          UPDATE reviews SET
+            sentiment       = $1,
+            sentiment_score = $2,
+            nlp_keywords    = $3,
+            nlp_topics      = $4,
+            nlp_analysed    = true
+          WHERE id = $5
+        `, [
+          nlp.sentiment,
+          nlp.sentiment_score,
+          nlp.keywords,
+          nlp.topics,
+          review.id
+        ]);
+
+        review.sentiment       = nlp.sentiment;
+        review.sentiment_score = nlp.sentiment_score;
+        review.nlp_keywords    = nlp.keywords;
+        review.nlp_topics      = nlp.topics;
+        review.nlp_analysed    = true;
+
+        console.log(`🧠 NLP done for review ${review.id}: ${nlp.sentiment} (${nlp.sentiment_score})`);
+      } catch (nlpErr) {
+        console.warn('NLP step failed (review still saved):', nlpErr.message);
+      }
+    }
+    // ── end NLP ───────────────────────────────────────────────────────────────
 
     // Recalculate transparency scores
     await recalculateScores(pg_id);
 
+    // Send response — only once, right here
     res.status(201).json({
       message: 'Review submitted successfully',
-      review: result.rows[0]
+      review
     });
+
   } catch (err) {
     console.error('submitReview error:', err.message);
     res.status(500).json({ message: 'Server error while submitting review' });
@@ -220,6 +257,8 @@ const getPGReviews = async (req, res) => {
         r.review_text, r.is_anonymous,
         r.owner_reply, r.replied_at,
         r.created_at,
+        r.sentiment, r.sentiment_score,
+        r.nlp_keywords, r.nlp_topics, r.nlp_analysed,
         CASE WHEN r.is_anonymous = true THEN 'Anonymous' ELSE u.name END as reviewer_name,
         'Verified Resident' as reviewer_label
       FROM reviews r
@@ -252,7 +291,6 @@ const getScorecard = async (req, res) => {
       return res.status(404).json({ message: 'Scorecard not found' });
     }
 
-    // Get claims with match status
     const claims = await pool.query(
       'SELECT * FROM pg_claims WHERE pg_id = $1', [pg_id]
     );
@@ -279,7 +317,6 @@ const replyToReview = async (req, res) => {
       return res.status(400).json({ message: 'Reply text is required' });
     }
 
-    // Make sure this review belongs to owner's PG
     const check = await pool.query(`
       SELECT r.id FROM reviews r
       JOIN pgs p ON p.id = r.pg_id
@@ -321,7 +358,6 @@ const flagReview = async (req, res) => {
       return res.status(404).json({ message: 'Review not found' });
     }
 
-    // Recalculate scores after moderation
     await recalculateScores(result.rows[0].pg_id);
 
     res.status(200).json({ message: 'Review moderated successfully', review: result.rows[0] });
@@ -342,7 +378,6 @@ const submitResidencyVerification = async (req, res) => {
       return res.status(400).json({ message: 'PG ID and proof URL are required' });
     }
 
-    // Check if already submitted
     const existing = await pool.query(
       'SELECT id, status FROM residency_verifications WHERE student_id = $1 AND pg_id = $2',
       [student_id, pg_id]
@@ -392,7 +427,6 @@ const updateResidencyStatus = async (req, res) => {
       return res.status(404).json({ message: 'Verification request not found' });
     }
 
-    // If approved → mark student as verified in users table
     if (status === 'approved') {
       await pool.query(
         'UPDATE users SET is_verified = true WHERE id = $1',
