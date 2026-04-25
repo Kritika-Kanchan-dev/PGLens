@@ -130,6 +130,10 @@ def analyse_sentiment(text):
 
 # ─── API ROUTES ───────────────────────────────────────────────────────────────
 
+@app.route("/")
+def home():
+    return {"message": "NLP Service Running 🚀"}
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "NLP service running ✅"})

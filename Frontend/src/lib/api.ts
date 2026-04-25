@@ -208,6 +208,16 @@ export const reviewAPI = {
   },
 
   // PATCH /api/reviews/:id/flag (admin only)
+  // flagReview: async (id: number, is_approved: boolean) => {
+  //   const res = await fetch(`${BASE_URL}/reviews/${id}/flag`, {
+  //     method: "PATCH",
+  //     headers: authHeaders(),
+  //     body: JSON.stringify({ is_approved }),
+  //   });
+  //   return handleResponse(res);
+  // },
+
+  // PATCH /api/reviews/:id/flag (admin only)
   flagReview: async (id: number, is_approved: boolean) => {
     const res = await fetch(`${BASE_URL}/reviews/${id}/flag`, {
       method: "PATCH",
@@ -216,7 +226,16 @@ export const reviewAPI = {
     });
     return handleResponse(res);
   },
+
+  // GET /api/admin/reviews — all reviews for admin moderation
+  getAllReviews: async () => {
+    const res = await fetch(`${BASE_URL}/admin/reviews`, {
+      headers: authHeaders(),
+    });
+    return handleResponse(res);
+  },
 };
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // IMAGE APIs

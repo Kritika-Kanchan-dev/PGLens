@@ -42,4 +42,40 @@ router.get('/stats', protect, restrictTo('admin'), async (req, res) => {
   }
 });
 
+// GET /api/admin/reviews — all reviews (admin only)
+router.get('/reviews', protect, restrictTo('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        r.id,
+        r.review_text,
+        r.overall_rating,
+        r.hygiene_rating,
+        r.food_rating,
+        r.safety_rating,
+        r.amenities_rating,
+        r.is_approved,
+        r.is_flagged,
+        r.is_anonymous,
+        r.sentiment,
+        r.sentiment_score,
+        r.nlp_keywords,
+        r.created_at,
+        r.owner_reply,
+        CASE WHEN r.is_anonymous = true THEN 'Anonymous' ELSE u.name END as reviewer_name,
+        u.email as reviewer_email,
+        p.name as pg_name,
+        p.id as pg_id
+      FROM reviews r
+      LEFT JOIN users u ON u.id = r.student_id
+      LEFT JOIN pgs p ON p.id = r.pg_id
+      ORDER BY r.created_at DESC
+    `);
+    res.status(200).json({ reviews: result.rows });
+  } catch (err) {
+    console.error('Admin get reviews error:', err.message);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;

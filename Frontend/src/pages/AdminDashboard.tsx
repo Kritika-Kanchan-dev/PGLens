@@ -275,15 +275,219 @@ const VerifyResidents = () => {
 };
 
 // ─── Review Moderation ────────────────────────────────────────────────────────
-const ReviewModeration = () => (
-  <div className="space-y-4">
-    <h2 className="text-lg font-bold text-foreground">Flagged Reviews</h2>
-    <div className="rounded-2xl border border-border bg-card p-12 text-center">
-      <Flag className="mx-auto h-10 w-10 text-muted-foreground/30" />
-      <p className="mt-3 text-muted-foreground">No flagged reviews at the moment ✅</p>
+// const ReviewModeration = () => (
+//   <div className="space-y-4">
+//     <h2 className="text-lg font-bold text-foreground">Flagged Reviews</h2>
+//     <div className="rounded-2xl border border-border bg-card p-12 text-center">
+//       <Flag className="mx-auto h-10 w-10 text-muted-foreground/30" />
+//       <p className="mt-3 text-muted-foreground">No flagged reviews at the moment ✅</p>
+//     </div>
+//   </div>
+// );
+
+// ─── Review Moderation ────────────────────────────────────────────────────────
+const ReviewModeration = () => {
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<"all" | "flagged" | "approved" | "removed">("all");
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
+
+  useEffect(() => {
+    reviewAPI.getAllReviews()
+      .then((data) => setReviews(data.reviews || []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = reviews.filter((r) => {
+    if (filter === "all")      return true;
+    if (filter === "flagged")  return r.is_flagged && r.is_approved;
+    if (filter === "approved") return r.is_approved && !r.is_flagged;
+    if (filter === "removed")  return !r.is_approved;
+    return true;
+  });
+
+  const handleApprove = async (id: number) => {
+    setActionLoading(id);
+    try {
+      await reviewAPI.flagReview(id, true);
+      setReviews((prev) =>
+        prev.map((r) => r.id === id ? { ...r, is_approved: true, is_flagged: false } : r)
+      );
+      toast.success("Review approved and made visible");
+    } catch (err: any) {
+      toast.error(err.message || "Action failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRemove = async (id: number) => {
+    setActionLoading(id);
+    try {
+      await reviewAPI.flagReview(id, false);
+      setReviews((prev) =>
+        prev.map((r) => r.id === id ? { ...r, is_approved: false, is_flagged: true } : r)
+      );
+      toast.success("Review removed from public view");
+    } catch (err: any) {
+      toast.error(err.message || "Action failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const sentimentColor = (s: string) => {
+    if (s === "positive") return "text-green-600 bg-green-50";
+    if (s === "negative") return "text-red-600 bg-red-50";
+    return "text-yellow-600 bg-yellow-50";
+  };
+
+  const tabs = [
+    { key: "all",      label: "All Reviews",  count: reviews.length },
+    { key: "approved", label: "Approved",      count: reviews.filter(r => r.is_approved && !r.is_flagged).length },
+    { key: "flagged",  label: "Flagged",       count: reviews.filter(r => r.is_flagged && r.is_approved).length },
+    { key: "removed",  label: "Removed",       count: reviews.filter(r => !r.is_approved).length },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-foreground">Review Moderation</h2>
+        <span className="text-sm text-muted-foreground">{reviews.length} total reviews</span>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setFilter(tab.key as any)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${
+              filter === tab.key
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card text-muted-foreground border-border hover:border-primary/50"
+            }`}
+          >
+            {tab.label}
+            <span className="ml-1.5 text-xs opacity-70">({tab.count})</span>
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-28 animate-pulse rounded-2xl bg-secondary/50" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-12 text-center">
+          <Flag className="mx-auto h-10 w-10 text-muted-foreground/30" />
+          <p className="mt-3 text-muted-foreground">No reviews in this category</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((review) => (
+            <div
+              key={review.id}
+              className={`rounded-2xl border bg-card p-4 transition-all ${
+                !review.is_approved
+                  ? "border-red-200 bg-red-50/30"
+                  : review.is_flagged
+                  ? "border-yellow-200 bg-yellow-50/30"
+                  : "border-border"
+              }`}
+            >
+              {/* Top row */}
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div>
+                  <span className="text-xs font-semibold text-primary">{review.pg_name}</span>
+                  <span className="mx-2 text-muted-foreground">·</span>
+                  <span className="text-xs text-muted-foreground">{review.reviewer_name}</span>
+                  <span className="mx-2 text-muted-foreground">·</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(review.created_at).toLocaleDateString("en-IN", {
+                      day: "numeric", month: "short", year: "numeric"
+                    })}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-xs font-semibold">⭐ {review.overall_rating}/5</span>
+                  {!review.is_approved ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">Removed</span>
+                  ) : review.is_flagged ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium">Flagged</span>
+                  ) : (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Approved</span>
+                  )}
+                  {review.sentiment && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${sentimentColor(review.sentiment)}`}>
+                      {review.sentiment}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Review text */}
+              <p className="text-sm text-foreground mb-2 leading-relaxed">
+                {review.review_text
+                  ? `"${review.review_text}"`
+                  : <span className="italic text-muted-foreground">No written review — ratings only</span>
+                }
+              </p>
+
+              {/* NLP keywords */}
+              {review.nlp_keywords && review.nlp_keywords.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {review.nlp_keywords.map((kw: string, i: number) => (
+                    <span key={i} className="text-xs bg-secondary text-muted-foreground px-2 py-0.5 rounded-full">
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Sub-ratings */}
+              <div className="flex gap-3 text-xs text-muted-foreground mb-3 flex-wrap">
+                <span>🧹 Hygiene: <strong>{review.hygiene_rating}</strong></span>
+                <span>🍽️ Food: <strong>{review.food_rating}</strong></span>
+                <span>🔒 Safety: <strong>{review.safety_rating}</strong></span>
+                <span>🛎️ Amenities: <strong>{review.amenities_rating}</strong></span>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2">
+                {!review.is_approved ? (
+                  <Button
+                    size="sm"
+                    className="h-8 gap-1"
+                    disabled={actionLoading === review.id}
+                    onClick={() => handleApprove(review.id)}
+                  >
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    {actionLoading === review.id ? "Restoring..." : "Restore"}
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 gap-1 text-destructive hover:bg-destructive/10"
+                    disabled={actionLoading === review.id}
+                    onClick={() => handleRemove(review.id)}
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                    {actionLoading === review.id ? "Removing..." : "Remove"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 const AdminDashboard = () => (
