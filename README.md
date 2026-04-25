@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="D:\PGLens\PGLens_logo_1.png" alt="PGLens Logo" width="80" />
+<img src="Frontend/public/PGLens_logo_1.png" alt="PGLens Logo" width="80" />
 
 # 🏠 PGLens
 
