@@ -208,16 +208,6 @@ export const reviewAPI = {
   },
 
   // PATCH /api/reviews/:id/flag (admin only)
-  // flagReview: async (id: number, is_approved: boolean) => {
-  //   const res = await fetch(`${BASE_URL}/reviews/${id}/flag`, {
-  //     method: "PATCH",
-  //     headers: authHeaders(),
-  //     body: JSON.stringify({ is_approved }),
-  //   });
-  //   return handleResponse(res);
-  // },
-
-  // PATCH /api/reviews/:id/flag (admin only)
   flagReview: async (id: number, is_approved: boolean) => {
     const res = await fetch(`${BASE_URL}/reviews/${id}/flag`, {
       method: "PATCH",
@@ -234,8 +224,16 @@ export const reviewAPI = {
     });
     return handleResponse(res);
   },
-};
 
+  // PATCH /api/reviews/:id/report — student reports a suspicious review
+  reportReview: async (id: number) => {
+    const res = await fetch(`${BASE_URL}/reviews/${id}/report`, {
+      method: "PATCH",
+      headers: authHeaders(),
+    });
+    return handleResponse(res);
+  },
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // IMAGE APIs

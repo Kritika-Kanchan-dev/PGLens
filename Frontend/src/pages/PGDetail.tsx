@@ -1,6 +1,7 @@
 // src/pages/PGDetail.tsx
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, CheckCircle, Heart, Share2, Star, MessageSquare, TrendingDown, TrendingUp } from "lucide-react";
+// import { ArrowLeft, MapPin, CheckCircle, Heart, Share2, Star, MessageSquare, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeft, MapPin, CheckCircle, Heart, Share2, Star, MessageSquare, TrendingDown, TrendingUp, Flag } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
@@ -11,6 +12,8 @@ import { pgAPI, reviewAPI } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+
+
 
 const PGDetail = () => {
   const { id } = useParams();
@@ -23,7 +26,9 @@ const PGDetail = () => {
   const [scorecard, setScorecard] = useState<any>(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
+  // const [loading, setLoading] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [reportedReviews, setReportedReviews] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -60,6 +65,19 @@ const PGDetail = () => {
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
     toast.success("Link copied to clipboard!");
+  };
+
+  const handleReport = async (reviewId: number) => {
+    if (!user) { toast.error("Please login to report reviews"); return; }
+    if (user.role !== "student") { toast.error("Only students can report reviews"); return; }
+    if (reportedReviews.has(reviewId)) { toast.info("You already reported this review"); return; }
+    try {
+      await reviewAPI.reportReview(reviewId);
+      setReportedReviews((prev) => new Set([...prev, reviewId]));
+      toast.success("Review reported. Admin will look into it.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to report review");
+    }
   };
 
   if (loading) {
@@ -311,6 +329,24 @@ const PGDetail = () => {
                         <div className="mt-3 ml-4 rounded-md border-l-2 border-primary pl-4">
                           <span className="text-xs font-medium text-primary">Owner Reply</span>
                           <p className="mt-1 text-sm text-muted-foreground">{r.owner_reply}</p>
+                        </div>
+                      )}
+
+                      {/* Report button — only shown to logged-in students */}
+                      {user?.role === "student" && (
+                        <div className="mt-3">
+                          <button
+                            onClick={() => handleReport(r.id)}
+                            disabled={reportedReviews.has(r.id)}
+                            className={`flex items-center gap-1 text-xs transition-colors ${
+                              reportedReviews.has(r.id)
+                                ? "text-muted-foreground cursor-default"
+                                : "text-muted-foreground hover:text-destructive cursor-pointer"
+                            }`}
+                          >
+                            <Flag className="h-3 w-3" />
+                            {reportedReviews.has(r.id) ? "Reported" : "Report this review"}
+                          </button>
                         </div>
                       )}
                     </div>

@@ -23,10 +23,8 @@ const AdminHome = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch all PGs to get stats
     Promise.all([
       pgAPI.getAll({ limit: "100" }),
-      // Fetch pending PGs directly
       fetch("http://localhost:5000/api/pgs?status=pending&limit=3", {
         headers: { Authorization: `Bearer ${localStorage.getItem("pglens_token")}` }
       }).then(r => r.json())
@@ -39,7 +37,6 @@ const AdminHome = () => {
       });
     }).catch(console.error).finally(() => setLoading(false));
 
-    // Fetch pending PGs for admin (need direct DB access)
     fetch("http://localhost:5000/api/admin/pgs/pending", {
       headers: { Authorization: `Bearer ${localStorage.getItem("pglens_token")}` }
     }).then(r => r.json()).then(data => {
@@ -140,7 +137,6 @@ const PGApprovals = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch ALL pgs including pending for admin
     fetch("http://localhost:5000/api/admin/pgs/pending", {
       headers: { Authorization: `Bearer ${localStorage.getItem("pglens_token")}` }
     }).then(r => r.json()).then(data => {
@@ -275,17 +271,6 @@ const VerifyResidents = () => {
 };
 
 // ─── Review Moderation ────────────────────────────────────────────────────────
-// const ReviewModeration = () => (
-//   <div className="space-y-4">
-//     <h2 className="text-lg font-bold text-foreground">Flagged Reviews</h2>
-//     <div className="rounded-2xl border border-border bg-card p-12 text-center">
-//       <Flag className="mx-auto h-10 w-10 text-muted-foreground/30" />
-//       <p className="mt-3 text-muted-foreground">No flagged reviews at the moment ✅</p>
-//     </div>
-//   </div>
-// );
-
-// ─── Review Moderation ────────────────────────────────────────────────────────
 const ReviewModeration = () => {
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -307,6 +292,7 @@ const ReviewModeration = () => {
     return true;
   });
 
+  // Clear flag — makes review fully approved and visible, removes flag
   const handleApprove = async (id: number) => {
     setActionLoading(id);
     try {
@@ -314,7 +300,7 @@ const ReviewModeration = () => {
       setReviews((prev) =>
         prev.map((r) => r.id === id ? { ...r, is_approved: true, is_flagged: false } : r)
       );
-      toast.success("Review approved and made visible");
+      toast.success("Review approved and visible to students");
     } catch (err: any) {
       toast.error(err.message || "Action failed");
     } finally {
@@ -322,6 +308,23 @@ const ReviewModeration = () => {
     }
   };
 
+  // Flag — review stays visible but marked for attention
+  const handleFlag = async (id: number) => {
+    setActionLoading(id);
+    try {
+      await reviewAPI.flagReview(id, true);
+      setReviews((prev) =>
+        prev.map((r) => r.id === id ? { ...r, is_flagged: true, is_approved: true } : r)
+      );
+      toast.success("Review flagged for attention");
+    } catch (err: any) {
+      toast.error(err.message || "Action failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Remove — hides review from public completely
   const handleRemove = async (id: number) => {
     setActionLoading(id);
     try {
@@ -329,7 +332,7 @@ const ReviewModeration = () => {
       setReviews((prev) =>
         prev.map((r) => r.id === id ? { ...r, is_approved: false, is_flagged: true } : r)
       );
-      toast.success("Review removed from public view");
+      toast.success("Review hidden from public view");
     } catch (err: any) {
       toast.error(err.message || "Action failed");
     } finally {
@@ -344,10 +347,10 @@ const ReviewModeration = () => {
   };
 
   const tabs = [
-    { key: "all",      label: "All Reviews",  count: reviews.length },
-    { key: "approved", label: "Approved",      count: reviews.filter(r => r.is_approved && !r.is_flagged).length },
-    { key: "flagged",  label: "Flagged",       count: reviews.filter(r => r.is_flagged && r.is_approved).length },
-    { key: "removed",  label: "Removed",       count: reviews.filter(r => !r.is_approved).length },
+    { key: "all",      label: "All Reviews", count: reviews.length },
+    { key: "approved", label: "Approved",     count: reviews.filter(r => r.is_approved && !r.is_flagged).length },
+    { key: "flagged",  label: "Flagged",      count: reviews.filter(r => r.is_flagged && r.is_approved).length },
+    { key: "removed",  label: "Removed",      count: reviews.filter(r => !r.is_approved).length },
   ];
 
   return (
@@ -375,6 +378,7 @@ const ReviewModeration = () => {
         ))}
       </div>
 
+      {/* Content */}
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -399,14 +403,14 @@ const ReviewModeration = () => {
                   : "border-border"
               }`}
             >
-              {/* Top row */}
+              {/* Top row: PG name · reviewer · date + badges */}
               <div className="flex items-start justify-between gap-3 mb-2">
-                <div>
-                  <span className="text-xs font-semibold text-primary">{review.pg_name}</span>
-                  <span className="mx-2 text-muted-foreground">·</span>
-                  <span className="text-xs text-muted-foreground">{review.reviewer_name}</span>
-                  <span className="mx-2 text-muted-foreground">·</span>
-                  <span className="text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                  <span className="font-semibold text-primary">{review.pg_name}</span>
+                  <span>·</span>
+                  <span>{review.reviewer_name}</span>
+                  <span>·</span>
+                  <span>
                     {new Date(review.created_at).toLocaleDateString("en-IN", {
                       day: "numeric", month: "short", year: "numeric"
                     })}
@@ -414,6 +418,7 @@ const ReviewModeration = () => {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="text-xs font-semibold">⭐ {review.overall_rating}/5</span>
+                  {/* Status badge */}
                   {!review.is_approved ? (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">Removed</span>
                   ) : review.is_flagged ? (
@@ -421,6 +426,7 @@ const ReviewModeration = () => {
                   ) : (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Approved</span>
                   )}
+                  {/* NLP sentiment badge */}
                   {review.sentiment && (
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${sentimentColor(review.sentiment)}`}>
                       {review.sentiment}
@@ -459,6 +465,7 @@ const ReviewModeration = () => {
               {/* Action buttons */}
               <div className="flex gap-2">
                 {!review.is_approved ? (
+                  // REMOVED → only Restore
                   <Button
                     size="sm"
                     className="h-8 gap-1"
@@ -469,16 +476,45 @@ const ReviewModeration = () => {
                     {actionLoading === review.id ? "Restoring..." : "Restore"}
                   </Button>
                 ) : (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 gap-1 text-destructive hover:bg-destructive/10"
-                    disabled={actionLoading === review.id}
-                    onClick={() => handleRemove(review.id)}
-                  >
-                    <XCircle className="h-3.5 w-3.5" />
-                    {actionLoading === review.id ? "Removing..." : "Remove"}
-                  </Button>
+                  <>
+                    {/* APPROVED + NOT FLAGGED → show Flag button */}
+                    {!review.is_flagged && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 gap-1 text-yellow-600 hover:bg-yellow-50"
+                        disabled={actionLoading === review.id}
+                        onClick={() => handleFlag(review.id)}
+                      >
+                        <Flag className="h-3.5 w-3.5" />
+                        {actionLoading === review.id ? "Flagging..." : "Flag"}
+                      </Button>
+                    )}
+                    {/* FLAGGED → show Approve to clear the flag */}
+                    {review.is_flagged && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 gap-1 text-green-600 hover:bg-green-50"
+                        disabled={actionLoading === review.id}
+                        onClick={() => handleApprove(review.id)}
+                      >
+                        <CheckCircle className="h-3.5 w-3.5" />
+                        {actionLoading === review.id ? "Approving..." : "Approve"}
+                      </Button>
+                    )}
+                    {/* Always show Remove for any approved review */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 gap-1 text-destructive hover:bg-destructive/10"
+                      disabled={actionLoading === review.id}
+                      onClick={() => handleRemove(review.id)}
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      {actionLoading === review.id ? "Removing..." : "Remove"}
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
