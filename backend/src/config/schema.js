@@ -244,8 +244,9 @@ const createTables = async () => {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 9. ADD NLP COLUMNS TO EXISTING reviews TABLE
-    //    (safe to run multiple times — IF NOT EXISTS prevents errors)
+    // 9. ADD EXTRA COLUMNS TO EXISTING TABLES
+    //    Safe to run multiple times — IF NOT EXISTS prevents errors
+    //    Covers: NLP columns + flagged_by for student report tracking
     // ─────────────────────────────────────────────────────────────────────────
     await pool.query(`
       ALTER TABLE reviews
@@ -253,7 +254,8 @@ const createTables = async () => {
         ADD COLUMN IF NOT EXISTS sentiment_score INTEGER DEFAULT 50,
         ADD COLUMN IF NOT EXISTS nlp_keywords TEXT[],
         ADD COLUMN IF NOT EXISTS nlp_topics TEXT[],
-        ADD COLUMN IF NOT EXISTS nlp_analysed BOOLEAN DEFAULT FALSE;
+        ADD COLUMN IF NOT EXISTS nlp_analysed BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS flagged_by VARCHAR(20) DEFAULT NULL;
     `);
     console.log('✅ NLP columns added to reviews table');
 

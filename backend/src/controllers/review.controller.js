@@ -2,10 +2,8 @@ const { pool } = require('../config/db');
 const { analyseReviewText } = require('../config/nlp');
 
 // ─── HELPER: Recalculate Transparency Score for a PG ─────────────────────────
-// Called every time a new review is added or updated
 const recalculateScores = async (pg_id) => {
   try {
-    // Get all approved reviews for this PG
     const reviewsResult = await pool.query(
       `SELECT hygiene_rating, food_rating, safety_rating, amenities_rating, overall_rating
        FROM reviews WHERE pg_id = $1 AND is_approved = true`,
@@ -15,10 +13,9 @@ const recalculateScores = async (pg_id) => {
     const reviews = reviewsResult.rows;
     if (reviews.length === 0) return;
 
-    // Calculate averages (1-5 scale → convert to 0-100)
     const avg = (field) => {
       const sum = reviews.reduce((acc, r) => acc + (r[field] || 0), 0);
-      return Math.round((sum / reviews.length) * 20); // *20 converts 1-5 to 0-100
+      return Math.round((sum / reviews.length) * 20);
     };
 
     const hygiene_score   = avg('hygiene_rating');
@@ -27,13 +24,11 @@ const recalculateScores = async (pg_id) => {
     const amenities_score = avg('amenities_rating');
     const overall_score   = avg('overall_rating');
 
-    // Get PG rent for price fairness calculation
     const pgResult = await pool.query(
       'SELECT monthly_rent, city FROM pgs WHERE id = $1', [pg_id]
     );
     const pg = pgResult.rows[0];
 
-    // Price fairness — compare against city average
     const cityAvgResult = await pool.query(
       `SELECT AVG(monthly_rent) as avg_rent FROM pgs
        WHERE city = $1 AND status = 'approved' AND is_active = true`,
@@ -43,17 +38,13 @@ const recalculateScores = async (pg_id) => {
     const fair_price_estimate = cityAvg;
     const price_difference = pg.monthly_rent - cityAvg;
 
-    // Price label logic
     let price_label = 'fair';
     const diffPercent = (price_difference / cityAvg) * 100;
     if (diffPercent > 10) price_label = 'overpriced';
     else if (diffPercent < -10) price_label = 'underpriced';
 
-    // Pricing score (100 = exactly fair, less if overpriced)
     const pricing_score = Math.max(0, Math.min(100, Math.round(100 - Math.abs(diffPercent))));
 
-    // Final weighted overall score
-    // Hygiene(30%) + Safety(25%) + Food(20%) + Amenities(15%) + Pricing(10%)
     const weighted_score = Math.round(
       hygiene_score   * 0.30 +
       safety_score    * 0.25 +
@@ -62,7 +53,6 @@ const recalculateScores = async (pg_id) => {
       pricing_score   * 0.10
     );
 
-    // Update transparency_scores table
     await pool.query(`
       INSERT INTO transparency_scores
         (pg_id, overall_score, hygiene_score, food_score, safety_score,
@@ -87,7 +77,6 @@ const recalculateScores = async (pg_id) => {
       price_difference, price_label, reviews.length
     ]);
 
-    // Also update scores in pgs table for quick access
     await pool.query(`
       UPDATE pgs SET
         overall_score = $1, hygiene_score = $2, food_score = $3,
@@ -100,7 +89,6 @@ const recalculateScores = async (pg_id) => {
       reviews.length, pg_id
     ]);
 
-    // Update pg_claims match status based on review ratings
     await updateClaimsStatus(pg_id, reviews);
 
   } catch (err) {
@@ -135,8 +123,6 @@ const updateClaimsStatus = async (pg_id, reviews) => {
 };
 
 // ─── SUBMIT REVIEW ────────────────────────────────────────────────────────────
-// POST /api/reviews
-// Only verified residents can submit reviews
 const submitReview = async (req, res) => {
   try {
     const student_id = req.user.id;
@@ -145,12 +131,10 @@ const submitReview = async (req, res) => {
       amenities_rating, overall_rating, review_text, is_anonymous
     } = req.body;
 
-    // Validate required fields
     if (!pg_id || !hygiene_rating || !food_rating || !safety_rating || !amenities_rating || !overall_rating) {
       return res.status(400).json({ message: 'PG ID and all ratings are required' });
     }
 
-    // Check if PG exists and is approved
     const pgCheck = await pool.query(
       `SELECT id FROM pgs WHERE id = $1 AND status = 'approved'`, [pg_id]
     );
@@ -158,7 +142,6 @@ const submitReview = async (req, res) => {
       return res.status(404).json({ message: 'PG not found or not approved' });
     }
 
-    // Check if student is a verified resident of this PG
     const verificationCheck = await pool.query(
       `SELECT id FROM residency_verifications
        WHERE student_id = $1 AND pg_id = $2 AND status = 'approved'`,
@@ -170,7 +153,6 @@ const submitReview = async (req, res) => {
       });
     }
 
-    // Check if already reviewed
     const existingReview = await pool.query(
       'SELECT id FROM reviews WHERE student_id = $1 AND pg_id = $2',
       [student_id, pg_id]
@@ -179,7 +161,6 @@ const submitReview = async (req, res) => {
       return res.status(409).json({ message: 'You have already reviewed this PG' });
     }
 
-    // Insert review
     const result = await pool.query(`
       INSERT INTO reviews
         (pg_id, student_id, hygiene_rating, food_rating, safety_rating,
@@ -194,7 +175,6 @@ const submitReview = async (req, res) => {
 
     const review = result.rows[0];
 
-    // ── NLP Analysis (runs after insert so review is saved even if NLP fails) ──
     if (review_text && review_text.trim().length > 5) {
       try {
         const nlp = await analyseReviewText(review_text);
@@ -226,12 +206,9 @@ const submitReview = async (req, res) => {
         console.warn('NLP step failed (review still saved):', nlpErr.message);
       }
     }
-    // ── end NLP ───────────────────────────────────────────────────────────────
 
-    // Recalculate transparency scores
     await recalculateScores(pg_id);
 
-    // Send response — only once, right here
     res.status(201).json({
       message: 'Review submitted successfully',
       review
@@ -244,7 +221,6 @@ const submitReview = async (req, res) => {
 };
 
 // ─── GET REVIEWS FOR A PG ────────────────────────────────────────────────────
-// GET /api/reviews/pg/:pg_id
 const getPGReviews = async (req, res) => {
   try {
     const { pg_id } = req.params;
@@ -275,7 +251,6 @@ const getPGReviews = async (req, res) => {
 };
 
 // ─── GET TRANSPARENCY SCORECARD ───────────────────────────────────────────────
-// GET /api/reviews/scorecard/:pg_id
 const getScorecard = async (req, res) => {
   try {
     const { pg_id } = req.params;
@@ -306,7 +281,6 @@ const getScorecard = async (req, res) => {
 };
 
 // ─── OWNER REPLY TO REVIEW ────────────────────────────────────────────────────
-// POST /api/reviews/:id/reply
 const replyToReview = async (req, res) => {
   try {
     const { id } = req.params;
@@ -342,21 +316,36 @@ const replyToReview = async (req, res) => {
   }
 };
 
-// ─── ADMIN: FLAG / UNFLAG REVIEW ──────────────────────────────────────────────
+// ─── ADMIN: FLAG / APPROVE REVIEW ─────────────────────────────────────────────
 // PATCH /api/reviews/:id/flag
+// - Flagging:  is_flagged = true,  flagged_by = 'admin', is_approved = true  (still visible)
+// - Approving: is_flagged = false, flagged_by = null,    is_approved = true  (clears flag)
+// - Removing:  is_flagged = true,  flagged_by = 'admin', is_approved = false (hidden)
 const flagReview = async (req, res) => {
   try {
     const { id } = req.params;
     const { is_approved } = req.body;
 
-    const result = await pool.query(
-      'UPDATE reviews SET is_flagged = true, is_approved = $1 WHERE id = $2 RETURNING *',
-      [is_approved !== false, id]
+    // Check current state to decide if admin is clearing a flag or setting one
+    const current = await pool.query(
+      'SELECT is_flagged, flagged_by FROM reviews WHERE id = $1', [id]
     );
-
-    if (result.rows.length === 0) {
+    if (current.rows.length === 0) {
       return res.status(404).json({ message: 'Review not found' });
     }
+
+    const isClearing = is_approved === true && current.rows[0].is_flagged === true;
+
+    const newIsFlagged = isClearing ? false : true;
+    const newFlaggedBy = isClearing ? null : 'admin';
+    const newIsApproved = is_approved !== false;
+
+    const result = await pool.query(
+      `UPDATE reviews
+       SET is_flagged = $1, is_approved = $2, flagged_by = $3
+       WHERE id = $4 RETURNING *`,
+      [newIsFlagged, newIsApproved, newFlaggedBy, id]
+    );
 
     await recalculateScores(result.rows[0].pg_id);
 
@@ -367,14 +356,22 @@ const flagReview = async (req, res) => {
   }
 };
 
-// PATCH /api/reviews/:id/report — any logged-in student can report a review
+// ─── STUDENT: REPORT A REVIEW ─────────────────────────────────────────────────
+// PATCH /api/reviews/:id/report
+// Marks review as flagged by a student — stays visible, admin decides what to do
 const reportReview = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Mark as flagged but keep approved (still visible, admin will decide)
+    // Safely add column if it doesn't exist yet (runs once, harmless after that)
+    await pool.query(`
+      ALTER TABLE reviews ADD COLUMN IF NOT EXISTS flagged_by VARCHAR(20) DEFAULT NULL
+    `);
+
     const result = await pool.query(
-      'UPDATE reviews SET is_flagged = true WHERE id = $1 RETURNING *',
+      `UPDATE reviews
+       SET is_flagged = true, flagged_by = 'student'
+       WHERE id = $1 RETURNING *`,
       [id]
     );
 
@@ -390,7 +387,6 @@ const reportReview = async (req, res) => {
 };
 
 // ─── SUBMIT RESIDENCY VERIFICATION ───────────────────────────────────────────
-// POST /api/reviews/verify-residency
 const submitResidencyVerification = async (req, res) => {
   try {
     const student_id = req.user.id;
@@ -428,7 +424,6 @@ const submitResidencyVerification = async (req, res) => {
 };
 
 // ─── ADMIN: APPROVE / REJECT RESIDENCY ───────────────────────────────────────
-// PATCH /api/reviews/verify-residency/:id
 const updateResidencyStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -467,7 +462,6 @@ const updateResidencyStatus = async (req, res) => {
 };
 
 // ─── ADMIN: GET ALL PENDING VERIFICATIONS ────────────────────────────────────
-// GET /api/reviews/verify-residency/pending
 const getPendingVerifications = async (req, res) => {
   try {
     const result = await pool.query(`
@@ -491,6 +485,6 @@ const getPendingVerifications = async (req, res) => {
 
 module.exports = {
   submitReview, getPGReviews, getScorecard,
-  replyToReview, flagReview,
-  submitResidencyVerification, updateResidencyStatus, getPendingVerifications, reportReview, 
+  replyToReview, flagReview, reportReview,
+  submitResidencyVerification, updateResidencyStatus, getPendingVerifications,
 };

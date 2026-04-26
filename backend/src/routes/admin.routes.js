@@ -56,6 +56,7 @@ router.get('/reviews', protect, restrictTo('admin'), async (req, res) => {
         r.amenities_rating,
         r.is_approved,
         r.is_flagged,
+        r.flagged_by,
         r.is_anonymous,
         r.sentiment,
         r.sentiment_score,

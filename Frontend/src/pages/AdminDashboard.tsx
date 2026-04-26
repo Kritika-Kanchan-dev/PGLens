@@ -1,6 +1,6 @@
 // src/pages/AdminDashboard.tsx
 import { useState, useEffect } from "react";
-import { Home, Building, Users, CheckCircle, AlertTriangle, Flag, Eye, XCircle } from "lucide-react";
+import { Home, Building, Users, CheckCircle, AlertTriangle, Flag, Eye, XCircle, AlertCircle } from "lucide-react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import StatCard from "@/components/StatCard";
@@ -292,13 +292,13 @@ const ReviewModeration = () => {
     return true;
   });
 
-  // Clear flag — makes review fully approved and visible, removes flag
+  // Clears flag — makes review fully approved and visible again
   const handleApprove = async (id: number) => {
     setActionLoading(id);
     try {
       await reviewAPI.flagReview(id, true);
       setReviews((prev) =>
-        prev.map((r) => r.id === id ? { ...r, is_approved: true, is_flagged: false } : r)
+        prev.map((r) => r.id === id ? { ...r, is_approved: true, is_flagged: false, flagged_by: null } : r)
       );
       toast.success("Review approved and visible to students");
     } catch (err: any) {
@@ -308,13 +308,13 @@ const ReviewModeration = () => {
     }
   };
 
-  // Flag — review stays visible but marked for attention
+  // Admin flags — review stays visible but marked for attention
   const handleFlag = async (id: number) => {
     setActionLoading(id);
     try {
       await reviewAPI.flagReview(id, true);
       setReviews((prev) =>
-        prev.map((r) => r.id === id ? { ...r, is_flagged: true, is_approved: true } : r)
+        prev.map((r) => r.id === id ? { ...r, is_flagged: true, is_approved: true, flagged_by: 'admin' } : r)
       );
       toast.success("Review flagged for attention");
     } catch (err: any) {
@@ -330,7 +330,7 @@ const ReviewModeration = () => {
     try {
       await reviewAPI.flagReview(id, false);
       setReviews((prev) =>
-        prev.map((r) => r.id === id ? { ...r, is_approved: false, is_flagged: true } : r)
+        prev.map((r) => r.id === id ? { ...r, is_approved: false, is_flagged: true, flagged_by: 'admin' } : r)
       );
       toast.success("Review hidden from public view");
     } catch (err: any) {
@@ -416,8 +416,9 @@ const ReviewModeration = () => {
                     })}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
                   <span className="text-xs font-semibold">⭐ {review.overall_rating}/5</span>
+
                   {/* Status badge */}
                   {!review.is_approved ? (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">Removed</span>
@@ -426,6 +427,21 @@ const ReviewModeration = () => {
                   ) : (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Approved</span>
                   )}
+
+                  {/* ── WHO FLAGGED IT badge ── */}
+                  {review.is_flagged && review.flagged_by === 'student' && (
+                    <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">
+                      <AlertCircle className="h-3 w-3" />
+                      Reported by student
+                    </span>
+                  )}
+                  {review.is_flagged && review.flagged_by === 'admin' && (
+                    <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                      <Flag className="h-3 w-3" />
+                      Flagged by admin
+                    </span>
+                  )}
+
                   {/* NLP sentiment badge */}
                   {review.sentiment && (
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${sentimentColor(review.sentiment)}`}>
