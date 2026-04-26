@@ -4,6 +4,27 @@ const { protect, restrictTo } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
+// GET /api/admin/public-stats — public homepage stats (no auth needed)
+router.get('/public-stats', async (req, res) => {
+  try {
+    const [approvedPGs, totalUsers, totalReviews, cities] = await Promise.all([
+      pool.query("SELECT COUNT(*) FROM pgs WHERE status = 'approved'"),
+      pool.query("SELECT COUNT(*) FROM users"),
+      pool.query("SELECT COUNT(*) FROM reviews WHERE is_approved = true"),
+      pool.query("SELECT COUNT(DISTINCT city) FROM pgs WHERE status = 'approved' AND city IS NOT NULL"),
+    ]);
+    res.status(200).json({
+      approved_pgs:   parseInt(approvedPGs.rows[0].count),
+      total_users:    parseInt(totalUsers.rows[0].count),
+      total_reviews:  parseInt(totalReviews.rows[0].count),
+      cities_covered: parseInt(cities.rows[0].count),
+    });
+  } catch (err) {
+    console.error('Public stats error:', err.message);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // GET /api/admin/pgs/pending — all pending PGs for admin
 router.get('/pgs/pending', protect, restrictTo('admin'), async (req, res) => {
   try {
@@ -20,7 +41,7 @@ router.get('/pgs/pending', protect, restrictTo('admin'), async (req, res) => {
   }
 });
 
-// GET /api/admin/stats — platform stats
+// GET /api/admin/stats — platform stats (admin only)
 router.get('/stats', protect, restrictTo('admin'), async (req, res) => {
   try {
     const [total, pending, approved, users, reviews] = await Promise.all([
@@ -31,10 +52,10 @@ router.get('/stats', protect, restrictTo('admin'), async (req, res) => {
       pool.query('SELECT COUNT(*) FROM reviews'),
     ]);
     res.status(200).json({
-      total_pgs: parseInt(total.rows[0].count),
-      pending_pgs: parseInt(pending.rows[0].count),
-      approved_pgs: parseInt(approved.rows[0].count),
-      total_users: parseInt(users.rows[0].count),
+      total_pgs:     parseInt(total.rows[0].count),
+      pending_pgs:   parseInt(pending.rows[0].count),
+      approved_pgs:  parseInt(approved.rows[0].count),
+      total_users:   parseInt(users.rows[0].count),
       total_reviews: parseInt(reviews.rows[0].count),
     });
   } catch (err) {
