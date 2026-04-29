@@ -140,6 +140,12 @@ export const pgAPI = {
     });
     return handleResponse(res);
   },
+
+  // GET /api/pgs/:id/similar
+  getSimilar: async (id: number) => {
+    const res = await fetch(`${BASE_URL}/pgs/${id}/similar`);
+    return handleResponse(res);
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════

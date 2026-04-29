@@ -43,7 +43,6 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/images', imageRoutes);
 const analysisRoutes = require('./routes/analysis.routes');
 app.use('/api/analysis', analysisRoutes);
-
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'PGLens API is running 🚀', timestamp: new Date().toISOString() });

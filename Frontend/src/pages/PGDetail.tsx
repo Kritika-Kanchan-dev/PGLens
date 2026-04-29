@@ -1,6 +1,5 @@
 // src/pages/PGDetail.tsx
 import { useParams, useNavigate } from "react-router-dom";
-// import { ArrowLeft, MapPin, CheckCircle, Heart, Share2, Star, MessageSquare, TrendingDown, TrendingUp } from "lucide-react";
 import { ArrowLeft, MapPin, CheckCircle, Heart, Share2, Star, MessageSquare, TrendingDown, TrendingUp, Flag } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -13,7 +12,7 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-
+import AiTrustBadge from "@/pages/AiTrustBadge";
 
 const PGDetail = () => {
   const { id } = useParams();
@@ -26,11 +25,11 @@ const PGDetail = () => {
   const [scorecard, setScorecard] = useState<any>(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
-  // const [loading, setLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [reportedReviews, setReportedReviews] = useState<Set<number>>(new Set());
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [similarPGs, setSimilarPGs] = useState<any[]>([]);   // ← NEW
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -44,8 +43,12 @@ const PGDetail = () => {
         setClaims(pgData.claims || []);
         setReviews(pgData.reviews || []);
         if (scorecardData) setScorecard(scorecardData.scorecard);
-        // Fetch AI analysis
-        // Fetch AI analysis
+
+        // Fetch similar PGs
+        pgAPI.getSimilar(parseInt(id!))
+          .then((data) => setSimilarPGs(data.similar_pgs || []))
+          .catch(() => {});
+
         // Fetch AI analysis
         try {
           const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -131,7 +134,6 @@ const PGDetail = () => {
     pg.has_hot_water && "Hot Water", pg.has_tv && "TV",
   ].filter(Boolean);
 
-  // ── Helper: sentiment colour classes ─────────────────────────────────────
   const sentimentStyle = (sentiment: string) => {
     if (sentiment === "positive") return "bg-green-100 text-green-800 border border-green-200";
     if (sentiment === "negative") return "bg-red-100 text-red-800 border border-red-200";
@@ -175,8 +177,9 @@ const PGDetail = () => {
         </motion.div>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
-          {/* Left column */}
+          {/* ── Left column ── */}
           <div className="space-y-6">
+
             {/* Image gallery */}
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
               <div className="overflow-hidden rounded-lg">
@@ -425,17 +428,14 @@ const PGDetail = () => {
                         <p className="mt-2 text-sm text-muted-foreground">{r.review_text}</p>
                       )}
 
-                      {/* ── NLP: Sentiment badge + topic pills ── */}
+                      {/* NLP: Sentiment badge + topic pills */}
                       {r.nlp_analysed && (
                         <div className="mt-3 flex flex-wrap items-center gap-2">
-                          {/* Sentiment pill */}
                           <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${sentimentStyle(r.sentiment)}`}>
                             <span>{sentimentEmoji(r.sentiment)}</span>
                             <span>{r.sentiment ? r.sentiment.charAt(0).toUpperCase() + r.sentiment.slice(1) : "Neutral"}</span>
                             <span className="opacity-60">· {r.sentiment_score}/100</span>
                           </span>
-
-                          {/* Topic pills */}
                           {r.nlp_topics?.slice(0, 3).map((topic: string) => (
                             <span key={topic}
                               className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 border border-blue-200">
@@ -445,12 +445,11 @@ const PGDetail = () => {
                         </div>
                       )}
 
-                      {/* ── NLP: Keywords ── */}
+                      {/* NLP: Keywords */}
                       {r.nlp_analysed && r.nlp_keywords?.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {r.nlp_keywords.slice(0, 6).map((kw: string) => (
-                            <span key={kw}
-                              className="rounded-md bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
+                            <span key={kw} className="rounded-md bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
                               #{kw}
                             </span>
                           ))}
@@ -473,7 +472,7 @@ const PGDetail = () => {
                         </div>
                       )}
 
-                      {/* Report button — only shown to logged-in students */}
+                      {/* Report button */}
                       {user?.role === "student" && (
                         <div className="mt-3">
                           <button
@@ -497,10 +496,11 @@ const PGDetail = () => {
             </motion.div>
           </div>
 
-          {/* Right sidebar */}
+          {/* ── Right sidebar ── */}
           <div className="space-y-4">
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
               className="sticky top-24 space-y-4">
+
               {/* Pricing card */}
               <div className="rounded-lg border border-border bg-card p-6">
                 <div className="text-3xl font-bold text-foreground">
@@ -519,11 +519,9 @@ const PGDetail = () => {
                     Fair Price Estimate: ₹{pg.fair_price_estimate?.toLocaleString()}
                   </p>
                 )}
-
                 <Button className="mt-4 w-full" size="lg" onClick={() => toast.info(`Contact: ${pg.owner_email}`)}>
                   Contact Owner
                 </Button>
-
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <Button variant="outline" className={`gap-2 ${isSaved ? "text-destructive border-destructive/30" : ""}`} onClick={handleSave}>
                     <Heart className={`h-4 w-4 ${isSaved ? "fill-current" : ""}`} /> {isSaved ? "Saved" : "Save"}
@@ -570,6 +568,51 @@ const PGDetail = () => {
                   </div>
                 </div>
               </div>
+
+              {/* ── Similar PGs ── NEW */}
+              {similarPGs.length > 0 && (
+                <div className="rounded-lg border border-border bg-card p-5">
+                  <h3 className="font-semibold text-foreground mb-3">Similar PGs Nearby</h3>
+                  <div className="space-y-3">
+                    {similarPGs.map((spg) => (
+                      <div
+                        key={spg.id}
+                        onClick={() => navigate(`/pg/${spg.id}`)}
+                        className="flex gap-3 cursor-pointer rounded-xl p-2 hover:bg-secondary/40 transition-colors"
+                      >
+                        {/* Thumbnail */}
+                        <div className="h-14 w-16 shrink-0 overflow-hidden rounded-lg bg-secondary/50">
+                          {spg.primary_image ? (
+                            <img src={spg.primary_image} alt={spg.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center text-[10px] text-muted-foreground">No img</div>
+                          )}
+                        </div>
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{spg.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{spg.location}</p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <span className="text-xs font-semibold text-foreground">
+                              ₹{spg.monthly_rent?.toLocaleString()}
+                            </span>
+                            {spg.overall_score > 0 && (
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                                spg.overall_score >= 70 ? 'bg-success/10 text-success' :
+                                spg.overall_score >= 40 ? 'bg-warning/10 text-warning' :
+                                'bg-destructive/10 text-destructive'
+                              }`}>
+                                {spg.overall_score}/100
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
             </motion.div>
           </div>
         </div>

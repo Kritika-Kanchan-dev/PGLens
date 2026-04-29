@@ -109,11 +109,26 @@ const getAllPGs = async (req, res) => {
     if (has_meals === 'true') { conditions.push(`p.has_meals = true`); }
     if (has_wifi === 'true') { conditions.push(`p.has_wifi = true`); }
 
-    // Sort options
-    let orderBy = 'ts.overall_score DESC'; // default: best rated
-    if (sort === 'price_low') orderBy = 'p.monthly_rent ASC';
-    if (sort === 'price_high') orderBy = 'p.monthly_rent DESC';
-    if (sort === 'newest') orderBy = 'p.created_at DESC';
+    // Sort options — smart ranking formula for default
+    let orderBy = `(
+      COALESCE(ts.overall_score, 0) * 0.50 +
+      LEAST(p.total_reviews * 2, 20) * 0.20 +
+      CASE WHEN ts.price_label = 'fair' THEN 15
+           WHEN ts.price_label = 'underpriced' THEN 10
+           ELSE 0 END * 0.15 +
+      CASE WHEN p.created_at > NOW() - INTERVAL '30 days' THEN 15 ELSE 0 END * 0.15
+    ) DESC`;
+    if (sort === 'best_rated')   orderBy = `(
+      COALESCE(ts.overall_score, 0) * 0.50 +
+      LEAST(p.total_reviews * 2, 20) * 0.20 +
+      CASE WHEN ts.price_label = 'fair' THEN 15
+           WHEN ts.price_label = 'underpriced' THEN 10
+           ELSE 0 END * 0.15 +
+      CASE WHEN p.created_at > NOW() - INTERVAL '30 days' THEN 15 ELSE 0 END * 0.15
+    ) DESC`;
+    if (sort === 'price_low')    orderBy = 'p.monthly_rent ASC';
+    if (sort === 'price_high')   orderBy = 'p.monthly_rent DESC';
+    if (sort === 'newest')       orderBy = 'p.created_at DESC';
     if (sort === 'most_reviewed') orderBy = 'p.total_reviews DESC';
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -419,8 +434,88 @@ const getSavedPGs = async (req, res) => {
   }
 };
 
+// ─── GET SIMILAR PGS ─────────────────────────────────────────────────────────
+// GET /api/pgs/:id/similar
+// Returns 3 PGs from same city + same room type, excluding current PG
+const getSimilarPGs = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get current PG's city and room type
+    const pgResult = await pool.query(
+      `SELECT city, room_type, monthly_rent FROM pgs WHERE id = $1`,
+      [id]
+    );
+    if (pgResult.rows.length === 0) {
+      return res.status(404).json({ message: 'PG not found' });
+    }
+    const { city, room_type, monthly_rent } = pgResult.rows[0];
+
+    // Find similar PGs — same city, same room type, not the current one
+    // Sort by smart ranking score
+    const result = await pool.query(`
+      SELECT
+        p.id, p.name, p.location, p.monthly_rent, p.room_type,
+        p.has_wifi, p.has_ac, p.has_meals,
+        ts.overall_score, ts.price_label, ts.hygiene_score,
+        (SELECT image_url FROM pg_images WHERE pg_id = p.id AND is_primary = true LIMIT 1) as primary_image,
+        ABS(p.monthly_rent - $4) as price_diff,
+        (
+          COALESCE(ts.overall_score, 0) * 0.50 +
+          LEAST(p.total_reviews * 2, 20) * 0.20 +
+          CASE WHEN ts.price_label = 'fair' THEN 15
+               WHEN ts.price_label = 'underpriced' THEN 10
+               ELSE 0 END * 0.15 +
+          CASE WHEN p.created_at > NOW() - INTERVAL '30 days' THEN 15 ELSE 0 END * 0.15
+        ) as rank_score
+      FROM pgs p
+      LEFT JOIN transparency_scores ts ON ts.pg_id = p.id
+      WHERE
+        p.status = 'approved'
+        AND p.is_active = true
+        AND p.id != $1
+        AND LOWER(p.city) = LOWER($2)
+        AND p.room_type = $3
+      ORDER BY rank_score DESC
+      LIMIT 3
+    `, [id, city, room_type, monthly_rent]);
+
+    // If not enough same-city same-roomtype results, fill with same city
+    let similar = result.rows;
+    if (similar.length < 3) {
+      const extra = await pool.query(`
+        SELECT
+          p.id, p.name, p.location, p.monthly_rent, p.room_type,
+          p.has_wifi, p.has_ac, p.has_meals,
+          ts.overall_score, ts.price_label, ts.hygiene_score,
+          (SELECT image_url FROM pg_images WHERE pg_id = p.id AND is_primary = true LIMIT 1) as primary_image,
+          (
+            COALESCE(ts.overall_score, 0) * 0.50 +
+            LEAST(p.total_reviews * 2, 20) * 0.20
+          ) as rank_score
+        FROM pgs p
+        LEFT JOIN transparency_scores ts ON ts.pg_id = p.id
+        WHERE
+          p.status = 'approved'
+          AND p.is_active = true
+          AND p.id != $1
+          AND LOWER(p.city) = LOWER($2)
+          AND p.id NOT IN (${similar.map((_, i) => `$${i + 3}`).join(',') || 'NULL'})
+        ORDER BY rank_score DESC
+        LIMIT $${similar.length + 3}
+      `, [id, city, ...similar.map(s => s.id), 3 - similar.length]);
+      similar = [...similar, ...extra.rows];
+    }
+
+    res.status(200).json({ similar_pgs: similar });
+  } catch (err) {
+    console.error('getSimilarPGs error:', err.message);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createPG, getAllPGs, getPGById, getOwnerPGs,
   updatePG, deletePG, updatePGStatus,
-  toggleSavePG, getSavedPGs
+  toggleSavePG, getSavedPGs, getSimilarPGs
 };

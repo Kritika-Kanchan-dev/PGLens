@@ -257,6 +257,26 @@ const createTables = async () => {
         ADD COLUMN IF NOT EXISTS nlp_analysed BOOLEAN DEFAULT FALSE,
         ADD COLUMN IF NOT EXISTS flagged_by VARCHAR(20) DEFAULT NULL;
     `);
+
+    // Add AI vision analysis columns to pgs table
+    await pool.query(`
+      ALTER TABLE pgs
+        ADD COLUMN IF NOT EXISTS ai_analysis_status  VARCHAR(20)  DEFAULT 'pending',
+        ADD COLUMN IF NOT EXISTS ai_analysed_at      TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS ai_hygiene_score    INTEGER,
+        ADD COLUMN IF NOT EXISTS ai_amenity_score    INTEGER,
+        ADD COLUMN IF NOT EXISTS ai_trust_score      INTEGER,
+        ADD COLUMN IF NOT EXISTS ai_flags            TEXT,
+        ADD COLUMN IF NOT EXISTS ai_amenity_matches  TEXT,
+        ADD COLUMN IF NOT EXISTS ai_cleanliness_note TEXT;
+    `);
+
+    // Add category column to pg_images (needed to group by bedroom/washroom/etc)
+    await pool.query(`
+      ALTER TABLE pg_images
+        ADD COLUMN IF NOT EXISTS category VARCHAR(20) DEFAULT 'bedroom';
+    `);
+    console.log('✅ AI vision columns added');
     console.log('✅ NLP columns added to reviews table');
 
     console.log('\n🎉 All tables created successfully!');
